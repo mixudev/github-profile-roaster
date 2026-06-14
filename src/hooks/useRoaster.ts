@@ -6,7 +6,7 @@ import { FUNNY_LOADING_STEPS_EN, FUNNY_LOADING_STEPS_ID } from '../data/loadingS
 export function useRoaster() {
   const [username, setUsername] = useState('');
   const [heatLevel, setHeatLevel] = useState<HeatLevel>('nuclear');
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = useState<Language>('id');
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export function useRoaster() {
     let interval: ReturnType<typeof setInterval>;
     if (loading) {
       interval = setInterval(() => {
-        setLoadingStep((prev) => (prev + 1) % activeLoadingSteps.length);
+        setLoadingStep((prev: number) => (prev + 1) % activeLoadingSteps.length);
       }, 700);
     } else {
       setLoadingStep(0);
@@ -32,7 +32,7 @@ export function useRoaster() {
     return () => clearInterval(interval);
   }, [loading, activeLoadingSteps]);
 
-  // Sync language change for preset profiles — re-renders the correct mock roast
+  // Sync language change for preset profiles
   useEffect(() => {
     if (!fetchedProfile) return;
     const presetKey = Object.keys(PRESET_PROFILES).find(
@@ -43,7 +43,7 @@ export function useRoaster() {
       setRoastResult(language === 'id' ? item.mockRoastId : item.mockRoastEn);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language]); // Only re-run when language changes, not on profile change
+  }, [language]);
 
   const handlePresetSelect = (key: string, playSound?: (t: any) => void) => {
     if (playSound) playSound('click');
@@ -51,14 +51,10 @@ export function useRoaster() {
     setUsername(item.profile.login);
     setError(null);
     setLoading(true);
-
-    // Capture current language at call time to avoid stale closure
     const currentLanguage = language;
-
     setTimeout(() => {
       setFetchedProfile(item.profile);
       setFetchedRepos(item.repos);
-      // Use captured language value — guaranteed to match what user selected
       setRoastResult(currentLanguage === 'id' ? item.mockRoastId : item.mockRoastEn);
       setActiveProvider('preset');
       setLoading(false);
@@ -69,27 +65,14 @@ export function useRoaster() {
   const handleCopy = (playSound?: (t: any) => void) => {
     if (playSound) playSound('laser');
     if (!roastResult || !fetchedProfile) return;
+    const shareTitle = language === 'id' ? 'HASIL ROASTING GITHUB' : 'GITHUB PROFILE ROASTED';
+    const shareText = `🔥 ${shareTitle}: @${fetchedProfile.login}
+💻 ${roastResult.developerTitle}
+💥 Burn Score: ${roastResult.burnScore}/100
 
-    const shareTitle = language === 'id' ? 'HASIL METODE SARKASME GITHUB PROFILE' : 'GITHUB PROFILE ROASTED';
-    const statusLabel = language === 'id' ? 'Gelar' : 'Title';
-    const burnRatingLabel = language === 'id' ? 'Skor Mental Damage' : 'Burn Score';
-
-    const shareText = `🔥 ${shareTitle}: @${fetchedProfile.login} (${fetchedProfile.name})
-💻 ${statusLabel}: ${roastResult.developerTitle}
-💥 ${burnRatingLabel}: ${roastResult.burnScore}/100
-
-⭐ [STATS ROAST]
-${roastResult.statsRoast}
-
-⭐ [BIO ROAST]
-${roastResult.bioRoast}
-
-⭐ [MAIN INCINERATION]
 ${roastResult.theMainRoast}
 
-Tags: ${roastResult.roastedTags.join(' ')}
-Roasted live at the GitHub Profile Roaster!`;
-
+${roastResult.roastedTags.join(' ')}`;
     navigator.clipboard.writeText(shareText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -104,13 +87,61 @@ Roasted live at the GitHub Profile Roaster!`;
     setActiveProvider('');
   };
 
-  const handleRoastRequest = async (
-    e: React.FormEvent,
-    playSound?: (t: any) => void
-  ) => {
+  const handleQuickRoast = async (newUsername: string, playSound?: (t: any) => void) => {
+    setRoastResult(null);
+    setFetchedProfile(null);
+    setFetchedRepos([]);
+    setError(null);
+    setActiveProvider('');
+
+    const trimmed = newUsername.trim().toLowerCase();
+    if (!trimmed) return;
+
+    if (PRESET_PROFILES[trimmed]) {
+      setUsername(trimmed);
+      handlePresetSelect(trimmed, playSound);
+      return;
+    }
+
+    setUsername(trimmed);
+    if (playSound) playSound('click');
+    setLoading(true);
+
+    try {
+      const githubRes = await fetch(`/api/github/${encodeURIComponent(trimmed)}`);
+      if (!githubRes.ok) {
+        const errJson = await githubRes.json();
+        throw new Error(errJson.error || 'GitHub account fetch request failed.');
+      }
+      const githubData = await githubRes.json();
+      setFetchedProfile(githubData.profile);
+      setFetchedRepos(githubData.repos);
+
+      const roastRes = await fetch('/api/roast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: githubData.profile, repos: githubData.repos, heatLevel, language }),
+      });
+      if (!roastRes.ok) {
+        const errJson = await roastRes.json();
+        throw new Error(errJson.error || 'Generation error inside the roast chamber.');
+      }
+      const data = await roastRes.json();
+      setError(null);
+      setRoastResult(data.roast);
+      setActiveProvider(data.provider || '');
+      setTimeout(() => { setLoading(false); if (playSound) playSound('success'); }, 500);
+    } catch (err: any) {
+      setError(err.message || 'Quick roast failed.');
+      setLoading(false);
+      if (playSound) playSound('burn');
+    }
+  };
+
+  const handleRoastRequest = async (e: React.FormEvent, playSound?: (t: any) => void) => {
     e.preventDefault();
     if (playSound) playSound('click');
-    setError(null); // Always clear previous errors at start of new request
+    setError(null);
 
     const trimmedUsername = username.trim().toLowerCase();
     if (!trimmedUsername) {
@@ -123,7 +154,6 @@ Roasted live at the GitHub Profile Roaster!`;
       return;
     }
 
-    // Use preset data if available
     if (PRESET_PROFILES[trimmedUsername]) {
       handlePresetSelect(trimmedUsername, playSound);
       return;
@@ -132,43 +162,29 @@ Roasted live at the GitHub Profile Roaster!`;
     setLoading(true);
 
     try {
-      // Step 1: Fetch GitHub data via backend proxy
       const githubRes = await fetch(`/api/github/${encodeURIComponent(trimmedUsername)}`);
       if (!githubRes.ok) {
         const errJson = await githubRes.json();
         throw new Error(errJson.error || 'GitHub account fetch request failed.');
       }
       const githubData = await githubRes.json();
-
       setFetchedProfile(githubData.profile);
       setFetchedRepos(githubData.repos);
 
-      // Step 2: Generate roast via backend AI proxy
       const roastRes = await fetch('/api/roast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile: githubData.profile,
-          repos: githubData.repos,
-          heatLevel,
-          language
-        })
+        body: JSON.stringify({ profile: githubData.profile, repos: githubData.repos, heatLevel, language }),
       });
-
       if (!roastRes.ok) {
         const errJson = await roastRes.json();
         throw new Error(errJson.error || 'Generation error inside the roast chamber.');
       }
-
       const data = await roastRes.json();
-      setError(null); // Clear any stale errors before showing result
+      setError(null);
       setRoastResult(data.roast);
       setActiveProvider(data.provider || '');
-
-      setTimeout(() => {
-        setLoading(false);
-        if (playSound) playSound('success');
-      }, 500);
+      setTimeout(() => { setLoading(false); if (playSound) playSound('success'); }, 500);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Incinerator power supply failed. Retry or use presets!');
@@ -178,7 +194,6 @@ Roasted live at the GitHub Profile Roaster!`;
   };
 
   return {
-    // State
     username, setUsername,
     heatLevel, setHeatLevel,
     language, setLanguage,
@@ -191,10 +206,10 @@ Roasted live at the GitHub Profile Roaster!`;
     copied,
     activeProvider,
     activeLoadingSteps,
-    // Handlers
     handlePresetSelect,
     handleCopy,
     handleReset,
     handleRoastRequest,
+    handleQuickRoast,
   };
 }

@@ -1,115 +1,100 @@
-import React, { useState } from 'react';
-import { AnimatePresence } from 'motion/react';
+import React from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 
 import { useSound } from './hooks/useSound';
 import { useRoaster } from './hooks/useRoaster';
 
-import { Header } from './components/Header';
-import { InputPanel } from './components/InputPanel';
-import { ProfileCard } from './components/ProfileCard';
-import { PresetsPanel } from './components/PresetsPanel';
-import { LoadingTerminal } from './components/LoadingTerminal';
-import { RoastResultPanel } from './components/RoastResult';
-import { EmptyState } from './components/EmptyState';
-import { ErrorDisplay } from './components/ErrorDisplay';
-import { Footer } from './components/Footer';
+import { InputScreen } from './components/InputScreen.tsx';
+import { LoadingScreen } from './components/LoadingScreen.tsx';
+import { ResultScreen } from './components/ResultScreen.tsx';
+
+type AppView = 'input' | 'loading' | 'result';
 
 export default function App() {
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const { playSound } = useSound(soundEnabled);
-
+  const { playSound } = useSound(true);
   const roaster = useRoaster();
 
-  const handleToggleSound = () => {
-    setSoundEnabled((prev) => !prev);
-    playSound('click');
-  };
+  // Derive current view from roaster state
+  const view: AppView = roaster.loading
+    ? 'loading'
+    : roaster.roastResult
+    ? 'result'
+    : 'input';
 
   return (
-    <div className="min-h-screen bg-[#FFEF00] text-black font-mono border-[16px] border-black p-4 md:p-10 flex flex-col justify-between scanlines selection:bg-black selection:text-[#FFEF00]">
+    <div className="min-h-screen bg-[#FFEF00] font-mono scanlines selection:bg-black selection:text-[#FFEF00]">
+      <AnimatePresence mode="wait">
+        {view === 'input' && (
+          <motion.div
+            key="input"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="min-h-screen"
+          >
+            <InputScreen
+              username={roaster.username}
+              heatLevel={roaster.heatLevel}
+              language={roaster.language}
+              loading={roaster.loading}
+              error={roaster.error}
+              onUsernameChange={roaster.setUsername}
+              onHeatLevelChange={roaster.setHeatLevel}
+              onLanguageChange={roaster.setLanguage}
+              onSubmit={(e) => roaster.handleRoastRequest(e, playSound)}
+              onPresetSelect={(key) => roaster.handlePresetSelect(key, playSound)}
+              onPlaySound={playSound}
+            />
+          </motion.div>
+        )}
 
-      <Header
-        soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
-        activeProvider={roaster.activeProvider}
-      />
+        {view === 'loading' && (
+          <motion.div
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="min-h-screen"
+          >
+            <LoadingScreen
+              username={roaster.username}
+              avatarUrl={roaster.fetchedProfile?.avatar_url}
+              language={roaster.language}
+              loadingStep={roaster.loadingStep}
+              loadingSteps={roaster.activeLoadingSteps}
+            />
+          </motion.div>
+        )}
 
-      <main className="flex-grow grid grid-cols-1 md:grid-cols-12 gap-8 relative z-20 items-stretch">
-
-        {/* LEFT COLUMN */}
-        <div className="col-span-12 md:col-span-5 flex flex-col gap-6">
-          <InputPanel
-            username={roaster.username}
-            heatLevel={roaster.heatLevel}
-            language={roaster.language}
-            loading={roaster.loading}
-            onUsernameChange={roaster.setUsername}
-            onHeatLevelChange={roaster.setHeatLevel}
-            onLanguageChange={roaster.setLanguage}
-            onSubmit={(e) => roaster.handleRoastRequest(e, playSound)}
-            onPlaySound={playSound}
-          />
-
-          {roaster.error && <ErrorDisplay error={roaster.error} />}
-
-          {roaster.fetchedProfile && (
-            <ProfileCard
+        {view === 'result' && roaster.roastResult && roaster.fetchedProfile && (
+          <motion.div
+            key="result"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            className="min-h-screen"
+          >
+            <ResultScreen
+              roastResult={roaster.roastResult}
               profile={roaster.fetchedProfile}
               repos={roaster.fetchedRepos}
               language={roaster.language}
-            />
-          )}
-
-          {!roaster.fetchedProfile && (
-            <PresetsPanel
-              language={roaster.language}
-              onSelect={(key) => roaster.handlePresetSelect(key, playSound)}
+              heatLevel={roaster.heatLevel}
+              copied={roaster.copied}
+              activeProvider={roaster.activeProvider}
+              onCopy={() => roaster.handleCopy(playSound)}
+              onReset={() => roaster.handleReset(playSound)}
+              onQuickRoast={(u) => roaster.handleQuickRoast(u, playSound)}
+              onLanguageChange={roaster.setLanguage}
+              onHeatLevelChange={roaster.setHeatLevel}
               onPlaySound={playSound}
             />
-          )}
-
-          <div className="hidden md:block flex-grow border-4 border-dashed border-black opacity-25" />
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div className="col-span-12 md:col-span-7 flex flex-col h-full min-h-[450px]">
-          <div className="bg-black text-white px-4 py-2 text-xl font-black uppercase inline-block self-start border-l-8 border-r-8 border-t-8 border-black">
-            {roaster.language === 'id' ? 'Hasil Keputusan' : 'The Verdict'}
-          </div>
-
-          <div className="flex-grow border-8 border-black bg-white p-6 md:p-8 shadow-[16px_16px_0px_0px_#000] relative flex flex-col justify-between overflow-hidden">
-            <AnimatePresence mode="wait">
-              {roaster.loading && (
-                <LoadingTerminal
-                  username={roaster.username}
-                  language={roaster.language}
-                  loadingStep={roaster.loadingStep}
-                  loadingSteps={roaster.activeLoadingSteps}
-                />
-              )}
-
-              {roaster.roastResult && !roaster.loading && (
-                <RoastResultPanel
-                  roastResult={roaster.roastResult}
-                  profile={roaster.fetchedProfile!}
-                  repos={roaster.fetchedRepos}
-                  language={roaster.language}
-                  copied={roaster.copied}
-                  onCopy={() => roaster.handleCopy(playSound)}
-                  onReset={() => roaster.handleReset(playSound)}
-                  onPlaySound={playSound}
-                />
-              )}
-
-              {!roaster.roastResult && !roaster.loading && (
-                <EmptyState language={roaster.language} />
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </main>
-
-      <Footer />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
