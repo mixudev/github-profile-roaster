@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: #f0f0f0;
+  margin: 0;
+  padding: 0;
+  /* Ensure text is always selectable by default */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Custom retro cyberpunk/brutalist scanline overlay */
+.scanlines {
+  position: relative;
+}
+
+.scanlines::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.08) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+  z-index: 9999;
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;  /* critical: never block mouse/touch/selection */
+  user-select: none;
+}
